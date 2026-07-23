@@ -35,6 +35,27 @@
 
 ---
 
+## 🎮 Controles y Credenciales por Defecto
+
+| Elemento | Detalle |
+| :--- | :--- |
+| ⌨️ **Atajo de despliegue** | `Ctrl + Alt + M` |
+| 🔑 **Contraseña por defecto** | Configurada en la variable del código fuente al inicio según la versión |
+| 🎫 **Licencia / Seriales** | Utiliza una de las claves de activación del listado interno en el primer inicio |
+| 📁 **Ruta / Ubicación** | `Escritorio/Capturas` y `Escritorio/Capturas/Logs_Teclado/` |
+
+---
+
+## 📞 Créditos y Soporte
+
+| Información | Detalle |
+| :--- | :--- |
+| 👨‍💻 **Desarrollador / Creador** | `ATTACK7710` |
+| 🏷️ **Versión** | `V2.0` |
+| 🌍 **País** | Bolivia 🇧🇴 |
+| 📱 **Contacto de Soporte** | `+591 69856525` |
+
+
 ## 🧰 Tecnologías Utilizadas
 
 | Tecnología | Propósito |
@@ -65,29 +86,10 @@ terminal: python monitor.pyw
 Para generar un binario autónomo para Windows que solicite privilegios de administrador automáticamente:
 terminal: pyinstaller --noconsole --onefile --uac-admin monitor.pyw
 
-## 🎮 Controles y Credenciales por Defecto
-
-| Elemento | Detalle |
-| :--- | :--- |
-| ⌨️ **Atajo de despliegue** | `Ctrl + Alt + M` |
-| 🔑 **Contraseña por defecto** | Configurada en la variable del código fuente al inicio según la versión |
-| 🎫 **Licencia / Seriales** | Utiliza una de las claves de activación del listado interno en el primer inicio |
-| 📁 **Ruta / Ubicación** | `Escritorio/Capturas` y `Escritorio/Capturas/Logs_Teclado/` |
-
 ---
-
-## 📞 Créditos y Soporte
-
-| Información | Detalle |
-| :--- | :--- |
-| 👨‍💻 **Desarrollador / Creador** | `ATTACK7710` |
-| 🏷️ **Versión** | `V2.0` |
-| 🌍 **País** | Bolivia 🇧🇴 |
-| 📱 **Contacto de Soporte** | `+591 69856525` |
 
 <div align="center">
 
----
 *Desarrollado con ❤️ por ATTACK7710 — Todos los derechos reservados.*
 
 </div>
