@@ -17,7 +17,7 @@ COMBINACION_TECLAS = "ctrl+alt+m"
 SERIALES_VALIDOS = [
     "7xKqW2", "M9bVf1", "z4RnP8", "tG7mK5", "X2vYh9", "L6wBf3", "p8N1vG", "k4XmW9", "Z3vRj5", "H8fLq2",
     "c1M9xV", "F7nTz4", "r2G6hK", "W9vPj3", "b5XmN1", "Y8kTz4", "v3RfG9", "h6M1xK", "P7vNq2", "z4XmW8",
-    "G9fTj1", "c3KbV5", "R8vNq2", "m1XfK7", "V9hTj4", "k2BmN6", "Z8fLq3", "x1M5vG", "H7nTz2", "r4KbV9",
+    "G9fTj1", "c3KbV5", "R8vNq2", "771077", "V9hTj4", "k2BmN6", "Z8fLq3", "x1M5vG", "H7nTz2", "r4KbV9",
     "W6vPj1", "b3XmN8", "Y9kTz5", "v2RfG4", "h7M1xK", "P8vNq3", "z5XmW9", "G1fTj6", "c4KbV2", "R9vNq5",
     "m2XfK8", "V1hTj7", "k3BmN4", "Z9fLq5", "x2M6vG", "H8nTz5", "r5KbV1", "W7vPj3", "b4XmN9", "Y1kTz6"
 ]
