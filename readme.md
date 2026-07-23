@@ -65,17 +65,29 @@ terminal: python monitor.pyw
 Para generar un binario autónomo para Windows que solicite privilegios de administrador automáticamente:
 terminal: pyinstaller --noconsole --onefile --uac-admin monitor.pyw
 
-🎮 Controles y Credenciales por Defecto
+## 🎮 Controles y Credenciales por Defecto
 
-Atajo de despliegue: Ctrl + Alt + M
-Contraseña por defecto en la variable del codigo fuente al inicio segun la version
-Licencia  Seriales: Utiliza una de las claves de activación del listado interno en el primer inicio.
-Ruta_Ubicación por defecto: Escritorio/Capturas y Escritorio/Capturas/Logs_Teclado/
+| Elemento | Detalle |
+| :--- | :--- |
+| ⌨️ **Atajo de despliegue** | `Ctrl + Alt + M` |
+| 🔑 **Contraseña por defecto** | Configurada en la variable del código fuente al inicio según la versión |
+| 🎫 **Licencia / Seriales** | Utiliza una de las claves de activación del listado interno en el primer inicio |
+| 📁 **Ruta / Ubicación** | `Escritorio/Capturas` y `Escritorio/Capturas/Logs_Teclado/` |
 
-📞 Créditos y Soporte
+---
 
-Desarrollador / Creador: ATTACK7710
-Versión: V2.0
-País: Bolivia 🇧🇴
-Contacto de Soporte: +591 69856525
-Desarrollado con ❤️ por ATTACK7710 — Todos los derechos reservados.
+## 📞 Créditos y Soporte
+
+| Información | Detalle |
+| :--- | :--- |
+| 👨‍💻 **Desarrollador / Creador** | `ATTACK7710` |
+| 🏷️ **Versión** | `V2.0` |
+| 🌍 **País** | Bolivia 🇧🇴 |
+| 📱 **Contacto de Soporte** | `+591 69856525` |
+
+<div align="center">
+
+---
+*Desarrollado con ❤️ por ATTACK7710 — Todos los derechos reservados.*
+
+</div>
