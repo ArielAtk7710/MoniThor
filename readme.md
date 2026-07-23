@@ -76,17 +76,19 @@ Asegúrate de contar con **Python 3.8+** instalado en tu sistema. Instala las li
 
 ```bash
 pip install customtkinter keyboard pillow pyautogui pyinstaller
-
+```
 2. Ejecutar Código Fuente
 
 Para lanzar la aplicación en modo desarrollo:
-terminal: python monitor.pyw
-
+```bash
+python monitor.pyw
+```
 3. Compilar a Ejecutable (.exe)
 Para generar un binario autónomo para Windows que solicite privilegios de administrador automáticamente:
-terminal: pyinstaller --noconsole --onefile --uac-admin monitor.pyw
+```bash
+pyinstaller --noconsole --onefile --uac-admin monitor.pyw
+```
 
----
 
 <div align="center">
 
