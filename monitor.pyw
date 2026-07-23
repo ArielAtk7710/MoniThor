@@ -9,6 +9,8 @@ import keyboard
 import sys
 import winreg as reg
 
+# --- VERSION DE SOFTWARE V2.0---
+
 # --- CONFIGURACIÓN DE SEGURIDAD ---
 CONTRASENA_ACCESO = "7710"  
 COMBINACION_TECLAS = "ctrl+alt+m"  
