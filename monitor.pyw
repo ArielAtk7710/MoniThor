@@ -11,7 +11,7 @@ import winreg as reg
 from collections import defaultdict
 
 # --- CONFIGURACIÓN DE SEGURIDAD ---
-CONTRASENA_ACCESO = "6525"  
+CONTRASENA_ACCESO = "7710"  
 COMBINACION_TECLAS = "ctrl+alt+m"  
 
 # --- LISTA DE 50 SERIALES VÁLIDOS ---
