@@ -38,6 +38,6 @@ pyinstaller --noconsole --onefile --uac-admin monitor.pyw
 
 ## 📋 Créditos y Soporte
 * **Creador:** Attack7710
-* **Versión actual:** V1.0
+* **Versión actual:** V1.4
 * **Ubicación:** Bolivia 🇧🇴
 * **Contacto de Soporte:** +591 69856525
