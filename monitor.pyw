@@ -10,6 +10,8 @@ import sys
 import winreg as reg
 
 # --- VERSION DE SOFTWARE V2.0---
+# --- problemas por solucionar V2.0---
+# --- se abre 2 veces la venta al iniciar  ctrl+alt+m ---
 
 # --- CONFIGURACIÓN DE SEGURIDAD ---
 CONTRASENA_ACCESO = "7710"  
