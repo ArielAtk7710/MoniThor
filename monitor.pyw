@@ -267,7 +267,7 @@ class MonitorApp:
             f"Programa: MoniThor M\n"
             f"Descripción: Software de monitoreo laboral en Python que realiza capturas de pantalla automáticas cada cierto tiempo.\n\n"
             f"Creador: Attack7710 - Desarrollador\n"
-            f"Versión: V1.3 (Con persistencia de configuración)\n"
+            f"Versión: V2.0 (Nuevas funcionalidades)\n"
             f"Ubicación: Bolivia\n"
             f"Contacto: +591 69856525\n"
             f"Fecha: {fecha_hoy}"
